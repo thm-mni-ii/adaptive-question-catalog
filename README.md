@@ -1,84 +1,65 @@
 # Adaptive Question Catalog
 
-Adaptiver Fragenkatalog mit Vue/Vite-Frontend und TypeScript-/Express-API v2.
-Die Anmeldung erfolgt über das Feedbacksystem (FBS), wie im Modeling Copilot:
-im FBS-iFrame per Token-Bridge und beim direkten Aufruf per OIDC Authorization
-Code mit PKCE. Passwörter werden ausschließlich beim FBS eingegeben.
+Adaptiver Fragenkatalog zum Erstellen und Bearbeiten von Fragen sowie zum
+Üben und Auswerten von Lernversuchen. Das Projekt besteht aus einem
+Vue-3-/Vuetify-Frontend mit Vite, einer TypeScript-/Express-API und MongoDB.
+Die Anmeldung erfolgt über das Feedbacksystem (FBS): direkt per OpenID Connect
+mit PKCE oder innerhalb des FBS per iFrame-Token-Bridge.
 
-## Lokale Entwicklung
+## Projektstruktur
 
-Voraussetzungen: Node.js 22, Docker und das separat laufende Feedbacksystem
-auf dessen aktuellem dev. Die hier geprüfte FBS-Referenz ist Commit
-`1c1253f6`; die Integrationsreferenz Modeling Copilot ist `198b82d`.
-### 1. Feedbacksystem starten
+| Pfad | Inhalt |
+| --- | --- |
+| `web/` | Frontend und nginx-Produktionsimage |
+| `api/backend/v2/` | Aktuell verwendetes Backend |
+| `api/backend/` | Legacy-Backend; wird nicht durch Compose oder das Produktionsmanifest gestartet |
+| `docker-compose.yaml` | Lokale API und MongoDB |
+| `k3s-portainer.yaml` | Kubernetes-Manifest für Portainer / k3s |
 
-Das [Feedbacksystem](https://github.com/thm-mni-ii/feedbacksystem) separat
-auschecken und dessen aktuellen `dev` verwenden. Bei einem neuen Checkout:
+## Lokal einrichten
+
+Voraussetzungen sind Node.js 22 mit npm, Docker mit Docker Compose und für
+die Anmeldung eine laufende FBS-Instanz mit Web Shell und Identity-Service.
+Die lokale Konfiguration erwartet die FBS-Web-Shell unter
+`http://localhost:8083` und den Identity-Service unter `http://localhost:8080`.
+Das FBS wird separat gemäß seiner eigenen Installationsanleitung eingerichtet.
+
+### 1. Backend und Datenbank mit Docker Compose starten
+
+Im Root-Verzeichnis dieses Repositories:
 
 ```sh
-git clone --branch dev https://github.com/thm-mni-ii/feedbacksystem.git
-cd feedbacksystem
-```
-
-Im Root des FBS-Repositories die Web Shell mit ihren Abhängigkeiten bauen
-und starten:
-
-```sh
-docker compose up -d --build web-shell
+docker compose up -d --build
 docker compose ps
 ```
 
-Die Compose-Datei startet dadurch folgende Dienste; die übrigen FBS-Module
-werden für die Anmeldung am eigenständigen Fragenkatalog nicht benötigt:
+Compose baut API v2 und startet sie mit Hot Reload. Der Quellcode ist in den
+Container eingebunden; Node-Abhängigkeiten und MongoDB-Daten liegen in
+benannten Volumes. Die lokale MongoDB läuft ohne Passwortschutz und ist wie
+die API nur an die Loopback-Adresse des Hosts gebunden.
 
-| Dienste | Aufgabe |
+| Dienst | Lokale Adresse |
 | --- | --- |
-| `web-shell` | FBS-Oberfläche, Navigation und Anwendungsverwaltung |
-| `identity-service`, `mysql1` | Anmeldung, OIDC-Clients und Benutzerdaten |
-| `core` | Core-API; Abhängigkeit der Web Shell |
-| `runner`, `mysql-checker`, `psql-checker`, `psql-sharing` | Abhängigkeiten der Core-API und des Runners |
-| `mongodb`, `mongodb-playground`, `minio` | Weitere Abhängigkeiten der Core-API |
+| API v2 | http://localhost:3001/api_v2/ |
+| API-Healthcheck | http://localhost:3001/health |
+| MongoDB | `mongodb://localhost:27019`, Datenbank `QCM_v2` |
 
-`web-shell`, `identity-service`, `core` und `runner` werden lokal gebaut;
-für die Datenbank- und Speicherdienste werden Images geladen. Beim ersten
-Start müssen die Builds und Healthchecks abgeschlossen sein. Der in der
-FBS-Compose-Datei eingebundene Signierschlüssel
-`secrets/identity-signing-key.p12` muss im FBS-Checkout vorhanden sein.
+Die Backend-Konfiguration steht in [docker-compose.yaml](docker-compose.yaml).
+Aus dem API-Container wird das FBS über `host.docker.internal` erreicht;
+`JWT_ISSUER` bleibt die öffentliche FBS-Adresse `http://localhost:8083`.
 
-Falls bereits das gesamte FBS läuft, die beiden Dienste mit überschneidenden
-Host-Ports im FBS-Repository stoppen:
+Logs anzeigen und Dienste stoppen:
 
 ```sh
-docker compose stop qcm-frontend sql-playground-web
+docker compose logs -f api
+docker compose down
 ```
 
-Sie belegen sonst die vom eigenständigen Fragenkatalog benötigten Ports
-8086 bzw. 3001. Für dieses Setup nicht alle FBS-Dienste pauschal starten.
+`docker compose down` behält die Datenbank-Volumes bei.
 
-FBS über **http://localhost:8083** öffnen und mit Benutzer **`admin`** und
-Passwort **`admin123`** anmelden. Dies ist der initiale lokale Testzugang
-des Identity-Service; bei einer bestehenden Datenbank kann das Passwort
-bereits geändert worden sein. Die FBS-Root-README nennt `https://localhost`
-für den Core-Einstieg; für diese Integration wird die **Web Shell auf Port
-8083** verwendet.
+### 2. Webprojekt starten
 
-Unter **Anwendungsverwaltung** (**http://localhost:8083/admin/apps**) über
-**Neue Anwendung registrieren** den Provider mit den
-[lokalen Einstellungen](#entwicklung-lokalen-provider-registrieren) anlegen.
-
-### 2. Fragenkatalog starten und anmelden
-
-In einem weiteren Terminal im Root von `adaptive-question-catalog` starten:
-
-```sh
-docker compose up --build -d --remove-orphans
-```
-
-Das startet ausschließlich MongoDB und API v2 mit Hot Reload.
-`--remove-orphans` entfernt beim Umstieg den früheren Webcontainer und gibt
-Port 8086 frei; die Datenbank-Volumes bleiben erhalten.
-
-Das Frontend läuft direkt auf dem Host. In einem weiteren Terminal:
+In einem weiteren Terminal, ausgehend vom Repository-Root:
 
 ```sh
 cd web
@@ -86,224 +67,153 @@ npm ci
 npm run dev
 ```
 
-Vite lädt die öffentlichen Dev-Werte aus `web/vite.config.ts` und leitet
-API-Aufrufe an `http://localhost:3001` weiter. Lokal wird kein Webimage gebaut.
-Ist Port 8086 belegt, bricht Vite mit einer Meldung ab, statt unbemerkt auf
-8087 auszuweichen und damit die registrierte Callback-URL zu ändern.
-Öffnen: **http://localhost:8086**. API: localhost:3001, MongoDB: localhost:27019.
-Für den direkten Login den Anmeldebutton verwenden und beim FBS mit
-`admin` / `admin123` anmelden. Alternativ im bereits angemeldeten FBS die
-Anwendung **Adaptive Question Catalog** in der Navigation öffnen; bei
-`IFRAME` wird die FBS-Sitzung automatisch übernommen.
-Die Docker-Ports für API und MongoDB sind lokal gebunden. Vite lauscht mit
-`host: true` auch auf den Netzwerkschnittstellen. Für den FBS-Login weiterhin
-`http://localhost:8086` mit der registrierten Callback-URL verwenden.
-Die lokale Datenbank besitzt
-keinen Passwortschutz und darf nicht öffentlich freigegeben werden.
+Die Anwendung ist unter **http://localhost:8086** erreichbar. Vite leitet
+`/api_v2` an das Backend auf Port 3001 weiter. Port 8086 muss frei sein;
+Vite wechselt nicht automatisch auf einen anderen Port.
 
-Es gibt genau eine `docker-compose.yaml`, ausschließlich für lokale Entwicklung.
-Die API verwendet einen Quellcode-Mount und ein Node-Modules-Volume.
-Die lokalen API-Werte stehen direkt in dieser Datei, die öffentlichen
-Frontend-Werte in der versionierten `web/vite.config.ts`. Keine Secrets in
-dieser Datei ablegen. Produktion läuft ausschließlich über
-`k3s-portainer.yaml` mit den in CI/CD gebauten Images und Portainer-Secrets.
+Die öffentlichen Entwicklungseinstellungen stehen in
+[web/vite.config.ts](web/vite.config.ts). Nach Änderungen Vite neu starten.
+Für die lokale Entwicklung ist keine `.env`-Datei erforderlich.
 
-Für lokale CONFIDENTIAL-Tests kann `OIDC_CLIENT_SECRET` direkt im lokalen
-Compose eingetragen werden; der Standard nutzt PUBLIC mit leerem Secret.
-Echte Produktionsgeheimnisse gehören ausschließlich in Portainer-Secrets.
+### 3. Anwendung im FBS registrieren
 
-Die öffentliche FBS-Adresse und die Provider-ID für Vite stehen als
-`VITE_*` in `web/vite.config.ts`. Nach Änderungen Vite neu starten.
-Die API spricht für OIDC mit derselben
-FBS-Shell wie der Browser (Port 8083); JWKS kommt lokal vom Identity-Service
-auf Port 8080. Der erwartete JWT-Aussteller ist die öffentliche Shell-Adresse
-**http://localhost:8083**, nicht die interne Docker-Adresse. Compose setzt
-dafür zusätzlich `OIDC_TOKEN_HOST`.
+Als FBS-Administrator unter `http://localhost:8083/admin/apps` einen Provider
+mit diesen Einstellungen anlegen:
 
-Neue Datenbanken sind zunächst leer. Bei Bedarf kann der Seed aus dem
-Hot-Reload-Setup manuell ausgeführt werden:
+| Einstellung | Lokaler Wert |
+| --- | --- |
+| ID / OIDC-Client-ID | `adaptive-question-catalog` |
+| Titel | Adaptive Question Catalog |
+| Icon | `mdi-school` |
+| Entry-URL | `http://localhost:8086/` |
+| Einbettung | `IFRAME` oder `EXTERNAL` |
+| OIDC | aktiviert |
+| Client-Typ | `PUBLIC` mit PKCE |
+| Redirect-URI | `http://localhost:8086/oauth2/callback` |
+| Scopes | `openid`, `profile`, `email` |
+| Aktiv / Navigation | aktiviert |
+| Benötigte globale Rolle | `USER` |
+
+Diese Werte passen zu Compose und Vite; `OIDC_CLIENT_SECRET` bleibt leer.
+Die Redirect-URI muss im FBS und in `OIDC_REDIRECT_URIS` exakt übereinstimmen.
+Anschließend die Anwendung auf Port 8086 öffnen und den Anmeldebutton nutzen
+oder sie in der FBS-Navigation öffnen. Passwörter werden beim FBS eingegeben.
+
+### Optionale Beispieldaten
+
+Neue Datenbanken sind zunächst leer. Für eine leere lokale Datenbank kann
+der Seed manuell gestartet werden:
 
 ```sh
 docker compose exec api npm run seed
 ```
 
-Er verweigert nicht leere Datenbanken. CI und Deployment führen keinen Seed
-aus. Bestehende FBS-Datenbanken werden nicht übernommen.
+Der Seed verweigert nicht leere Datenbanken. Er wird weder beim Start noch
+in CI oder beim Deployment automatisch ausgeführt.
 
-## Anwendung im FBS registrieren
+## Webprojekt bauen
 
-### Entwicklung: lokalen Provider registrieren
+Ausgehend vom Repository-Root:
 
-Als lokaler FBS-Admin unter **http://localhost:8083/admin/apps** einen
-Provider mit diesen Werten speichern:
+```sh
+cd web
+npm ci
+npm run build
+```
 
-| Einstellung | Wert für Entwicklung |
-| --- | --- |
-| ID und Client-ID | adaptive-question-catalog |
-| Titel | Adaptive Question Catalog |
-| Icon | mdi-school |
-| Entry-URL | http://localhost:8086/ |
-| Einbettung | IFRAME (im FBS) oder EXTERNAL (separat öffnen) |
-| OIDC | aktiviert |
-| Client-Typ | PUBLIC mit PKCE |
-| Redirect-URI | http://localhost:8086/oauth2/callback |
-| Scopes | openid, profile, email |
-| Aktiv / Navigation | aktiviert |
-| Benötigte globale Rolle | USER |
+Der Befehl führt die Vue-/TypeScript-Typprüfung und den Vite-Produktionsbuild
+aus. Das Ergebnis liegt in `web/dist/`.
 
-Diese Werte passen zu `web/vite.config.ts` und `docker-compose.yaml`; `OIDC_CLIENT_SECRET` bleibt
-leer. Für einen optionalen lokalen CONFIDENTIAL-Test den Client-Typ im FBS
-ändern und das dort vergebene Secret direkt in der lokalen Compose-Datei
-bei `OIDC_CLIENT_SECRET` eintragen. Danach den API-Container mit
-`docker compose up -d api` neu erstellen lassen.
+Das Produktionsimage aus dem Repository-Root bauen:
 
-### Produktion: produktiven Provider registrieren
+```sh
+docker build -t aqc-web:local ./web
+```
 
-Voraussetzung ist eine betriebene FBS-Instanz mit Web Shell und
-Identity-Service sowie das unten beschriebene
-[Deployment über Portainer / k3s](#portainer--k3s). Die produktive
-FBS-Installation wird separat verwaltet. Dort mit einem produktiven
-Administratorkonto unter `https://<fbs-domain>/admin/apps` anmelden;
-`admin` / `admin123` ist ausschließlich der lokale Testzugang dieser Anleitung.
+Das Image baut das Frontend und liefert es anschließend mit nginx auf Port 80
+aus. nginx leitet `/api_v2/` an `api:3001` weiter; der Backend-Dienst muss im
+Container-Netzwerk unter diesem Namen erreichbar sein.
+Beim Containerstart schreibt `runtime-config.sh` die öffentlichen Variablen
+`FBS_HOST_ORIGIN` und `FBS_PROVIDER_ID` in `/config.js`. Beide müssen für die
+Zielumgebung gesetzt werden. Geheimnisse gehören nicht in die Webkonfiguration.
 
-Einen eigenen Provider in der produktiven FBS-Instanz anlegen. In den folgenden
-Beispielen `aqc.example.org` und `fbs.example.org` durch die echten Domains
-ersetzen:
+## Backend bauen
 
-| Einstellung | Wert für Produktion (Beispiel) |
-| --- | --- |
-| ID und Client-ID | adaptive-question-catalog |
-| Titel | Adaptive Question Catalog |
-| Icon | mdi-school |
-| Entry-URL | https://aqc.example.org/ |
-| Einbettung | IFRAME oder EXTERNAL |
-| OIDC | aktiviert |
-| Client-Typ | PUBLIC mit PKCE oder CONFIDENTIAL mit PKCE |
-| Redirect-URI | https://aqc.example.org/oauth2/callback |
-| Scopes | openid, profile, email |
-| Aktiv / Navigation | aktiviert |
-| Benötigte globale Rolle | nach gewünschter Sichtbarkeit, z. B. USER |
+Das aktuelle Backend liegt in `api/backend/v2`. Ausgehend vom Repository-Root:
 
-In `k3s-portainer.yaml` die zugehörigen Werte der ConfigMap `aqc-config`
-setzen:
+```sh
+cd api/backend/v2
+npm ci
+npm run build
+```
 
-| Variable | Wert für Produktion (Beispiel) |
-| --- | --- |
-| `FBS_HOST_ORIGIN`, `JWT_ISSUER` | https://fbs.example.org |
-| `FBS_PROVIDER_ID`, `OIDC_CLIENT_ID` | adaptive-question-catalog |
-| `OIDC_REDIRECT_URIS` | https://aqc.example.org/oauth2/callback |
-| `OIDC_TOKEN_URI` | https://fbs.example.org/oauth2/token |
-| `JWT_JWKS_URI` | https://fbs.example.org/oauth2/jwks |
+TypeScript kompiliert die API nach `api/backend/v2/dist/`. Das gebaute Backend
+wird mit `node dist/index.js` gestartet. `npm start` baut es vor dem Start erneut.
+Zum Ausführen benötigt die API eine erreichbare MongoDB sowie die Datenbank-
+und FBS-Konfiguration aus Compose, bei einem Start auf dem Host mit passenden
+Host-Adressen statt Container-Adressen. Der reine Build benötigt keine laufenden
+Dienste.
 
-Für PUBLIC bleibt `OIDC_CLIENT_SECRET` ungesetzt bzw. leer. Für CONFIDENTIAL
-das im produktiven FBS vergebene Secret ausschließlich im Portainer-Secret
-`aqc-secrets` unter `OIDC_CLIENT_SECRET` hinterlegen. Keine Secret-`.env`
-und keine Secrets in `VITE_*` oder im Web-Image verwenden. Nach Änderungen
-an ConfigMap oder Secret die betroffenen Deployments neu ausrollen.
+Das Produktionsimage aus dem Repository-Root bauen:
 
-Anschließend `https://aqc.example.org/` öffnen, den Anmeldebutton verwenden
-und sich am produktiven FBS anmelden. Zusätzlich die Anwendung aus der
-produktiven FBS-Navigation öffnen und die Sitzungsübernahme prüfen.
+```sh
+docker build -t aqc-api:local ./api/backend/v2
+```
 
-### Gemeinsames Loginverhalten
+Das Image enthält die kompilierte API mit Produktionsabhängigkeiten und startet
+`node dist/index.js` auf Port 3001. Es benötigt zur Laufzeit insbesondere
+`MONGODB_URL`, `MONGODB_DB_NAME`, `JWT_JWKS_URI`, `JWT_ISSUER`,
+`OIDC_TOKEN_URI`, `OIDC_CLIENT_ID` und `OIDC_REDIRECT_URIS`.
+`OIDC_CLIENT_SECRET` wird nur für einen `CONFIDENTIAL`-Client gesetzt.
 
-Die Redirect-URI muss sowohl im FBS als auch in `OIDC_REDIRECT_URIS` exakt
-übereinstimmen. Mehrere erlaubte Callback-URLs können dort kommagetrennt stehen.
+## Tests und CI/CD
 
-Im FBS anmelden und die Anwendung in der Navigation öffnen: Der iFrame
-fordert automatisch einen Token an, prüft dabei Absenderfenster und Ursprung
-und erneuert ihn über den Host. Direkt geöffnet zeigt die Anwendung eine
-Loginseite mit Button und Einrichtungshilfe. PKCE-Verifier und State werden
-pro Anmeldung erzeugt und geprüft; der Token-Austausch findet in der API statt.
-PUBLIC-Sitzungen erneuern per stillem PKCE-iFrame, solange die FBS-Sitzung
-besteht. Blockierte Drittanbieter-Cookies können eine erneute Anmeldung nötig
-machen. CONFIDENTIAL-Clients können Refresh-Tokens verwenden.
+Tests werden nach `npm ci` im jeweiligen Projektverzeichnis ausgeführt:
 
-Die API prüft RS256-Signatur, Ablauf, Nutzer-ID und konfigurierten Aussteller.
-`JWT_AUDIENCE` kann kommagetrennt auf die tatsächlich ausgestellten Audiences
-beschränkt werden. Für eine auf diesen Provider beschränkte Installation
-`adaptive-question-catalog` setzen und beide Anmeldewege prüfen. Ohne diesen
-Wert entspricht die Prüfung der Copilot-Referenz ohne Audience-Einschränkung.
-Tokens werden im Browser nur in der Sitzung dieses Tabs gespeichert; der alte
-`jsessionid`-URL-Login und der feste Entwickler-Token wurden entfernt.
+| Verzeichnis | Befehl | Prüfung |
+| --- | --- | --- |
+| `web/` | `npm test` | Frontend-Tests |
+| `web/` | `npm run type-check:tests` | Typprüfung der Tests |
+| `api/backend/v2/` | `npm test` | Backend-Tests mit isolierten Testdatenbanken |
+| `api/backend/v2/` | `npx --no-install tsc --noEmit -p tsconfig.seed.json` | Typprüfung des Seeds |
 
-## CI/CD und Container
+Die [CI](.github/workflows/ci.yml) prüft bei Pull Requests sowie Pushes auf
+`main` und `dev` Tests, Typen, Web- und Backend-Builds einschließlich des
+Legacy-Backends sowie beide Produktionsimages.
+Der [Publish-Workflow](.github/workflows/cd.yml) veröffentlicht bei Pushes auf
+`main` die Images `ghcr.io/<owner>/<repo>-api` und
+`ghcr.io/<owner>/<repo>-web`, jeweils als `latest` und
+`sha-<vollständiger-commit-sha>`. Die Veröffentlichung führt kein Deployment aus.
 
-- PRs und Pushes auf `main`/`dev`: Web-Tests, Typprüfungen und Build,
-  Legacy-API-Build, v2-Build/-Tests/Seed-Typprüfung sowie beide Container-Builds.
-  Der Web-Produktionsbuild wird damit in CI geprüft, unabhängig vom lokalen
-  Vite-Dev-Server.
-- Jeder Push nach `main` (insbesondere ein Merge) baut und veröffentlicht
-  beide Images: `ghcr.io/<owner>/<repo>-api:latest` und `-web:latest`.
-  Zusätzlich erhalten beide `sha-<vollständiger-commit-sha>` als eindeutigen
-  Tag. Release-Tags sind nicht erforderlich.
-- Die Images verwenden API v2 und nginx. Das Web-Dockerfile führt für das
-  Produktionsimage `npm run build` aus; nginx liefert anschließend `dist` aus.
-  Das Web-Image liest
-  `FBS_HOST_ORIGIN` und `FBS_PROVIDER_ID` beim Containerstart in
-  `/config.js`; dafür muss es nicht pro Umgebung neu gebaut werden.
-- Veröffentlichung und Portainer-Deployment sind getrennte Schritte.
+## Produktion mit Portainer / k3s
 
-## Portainer / k3s
+[k3s-portainer.yaml](k3s-portainer.yaml) stellt MongoDB mit persistentem
+Speicher, API und nginx-Webfrontend sowie einen Traefik-Ingress bereit.
+Die Produktion verwendet die durch CI/CD gebauten Images.
 
-`k3s-portainer.yaml` ist eine Vorlage für einen Kubernetes-Stack mit
-Traefik, eigenem Namespace, MongoDB-PVC und internen API-/Mongo-Services.
-Der öffentliche Einstieg liegt auf einer eigenen Domain an der Wurzel `/`;
-nginx leitet API-Anfragen intern weiter. Es wird keine bestehende FBS-
-Ingress-Regel verändert. Die Vorlage ist kein bereits ausgeführtes Deployment.
+1. Image-Pfade und Tags im Manifest setzen. Für reproduzierbare Deployments
+   beide Images auf denselben veröffentlichten Commit-Tag festlegen.
+2. `aqc.example.org` und `fbs.example.org` durch die eigenen Domains ersetzen.
+   Die ConfigMap `aqc-config` enthält die öffentlichen FBS-, OIDC- und
+   Datenbankeinstellungen. `JWT_ISSUER` muss dem FBS-Aussteller entsprechen.
+3. Im Namespace `adaptive-question-catalog` über Portainer das Secret
+   `aqc-secrets` mit `MONGO_USER`, `MONGO_PASSWORD` und `MONGODB_URL` anlegen.
+   Die URL lautet `mongodb://<user>:<URL-kodiertes-passwort>@mongo:27017/?authSource=admin`
+   und muss zu den MongoDB-Zugangsdaten passen. Bei `CONFIDENTIAL` zusätzlich
+   `OIDC_CLIENT_SECRET` hinterlegen. Produktionsgeheimnisse bleiben in Portainer.
+4. DNS, TLS-Secret `aqc-tls` und passenden persistenten Speicher bereitstellen.
+   Bei privaten Images den Registry-Zugang konfigurieren.
+5. Im produktiven FBS einen Provider mit der produktiven Entry-URL und
+   `https://<aqc-domain>/oauth2/callback` registrieren. Client-ID und Client-Typ
+   müssen zur API-Konfiguration passen.
+6. Das angepasste Manifest als Kubernetes-Stack in Portainer bereitstellen und
+   die Anmeldung direkt sowie über die FBS-Navigation prüfen.
 
-1. Die Vorlage verwendet `latest` mit `imagePullPolicy: Always`. Für einen
-   reproduzierbaren Stand beide Image-Tags auf denselben veröffentlichten
-   `sha-<vollständiger-commit-sha>` setzen; gegebenenfalls GHCR-Organisation
-   anpassen. Neue Images rollen laufende Pods nicht automatisch neu aus:
-   in Portainer das Deployment neu ausrollen bzw. den Image-Tag ändern.
-   Für private Packages Registry-Zugang bzw. imagePullSecrets ergänzen.
-2. Alle Vorkommen von `aqc.example.org` und `fbs.example.org` ersetzen.
-   Die FBS-Adresse muss vom Browser und aus dem Cluster erreichbar sein.
-   `JWT_ISSUER` muss exakt dem öffentlichen FBS-Aussteller entsprechen.
-3. Namespace `adaptive-question-catalog` vorbereiten. Darin in Portainer
-   Secret `aqc-secrets` mit Schlüsseln `MONGO_USER`, `MONGO_PASSWORD`,
-   `MONGODB_URL` und bei CONFIDENTIAL `OIDC_CLIENT_SECRET` anlegen.
-   Mongo-URL: `mongodb://<user>:<URL-kodiertes-passwort>@mongo:27017/?authSource=admin`.
-   Die Werte müssen zu den Mongo-Initialisierungsdaten passen. Eine Änderung
-   des Secrets allein ändert keine Benutzer einer bestehenden Datenbank.
-4. DNS und TLS-Secret `aqc-tls` für die AQC-Domain bereitstellen; bei
-   cert-manager den Ingress passend zur Clusterkonfiguration ergänzen.
-   StorageClass und PVC-Größe bei Bedarf anpassen.
-5. Datenbank vor Updates sichern (mongodump) und Wiederherstellung prüfen.
-   Die bestehende API legt beim Start Indizes an und führt ihre vorhandene
-   nicht destruktive Legacy-Attempt-Kompatibilitätsmigration aus.
-6. Manifest in Portainer als Kubernetes-Stack einlesen, Konfiguration prüfen
-   und dort bereitstellen. Danach FBS-Provider mit Produktiv-URL und Callback
-   registrieren und beide Anmeldewege prüfen.
+Vor Updates die Datenbank sichern. Geänderte Secrets ändern keine bestehenden
+MongoDB-Benutzer. Nach Konfigurations- oder Imageänderungen die betroffenen
+Deployments neu ausrollen.
 
-`/health` ist der interne API-Probe-Endpunkt. Bei Loginfehlern zuerst FBS-
-Erreichbarkeit, Redirect-URI, Client-ID/-Typ, Secret und JWT-Aussteller prüfen.
-Bei HTTP 401 auch JWKS-Erreichbarkeit, Tokenablauf und Audience kontrollieren.
-Kein Token oder Secret soll in Tickets oder Logs kopiert werden.
+## Lizenz
 
-## Umfang und Grenzen
-
-Fachliche Kurs-, Fragen- und Lernlogik bleibt bestehen. Kursauswahl nutzt
-weiterhin die vorhandenen Mock-Kurse; der Login synchronisiert keine FBS-Kurse.
-Globale ADMIN-Navigation stammt aus dem FBS-Claim. Die bestehende v2-API hat
-noch kein vollständiges Rollen-/Kursberechtigungsmodell; Frontend-Guards
-ersetzen keine serverseitige fachliche Autorisierung. Diese Änderung liefert
-Anmeldung und Tokenprüfung, keine neue fachliche Berechtigungsdomäne.
-
-`api/backend` bleibt als Legacy-Code erhalten und wird nicht bereitgestellt.
-Die ursprüngliche Dateiüberführung ist in [docs/migration.md](docs/migration.md)
-dokumentiert; ihr damaliger Stand vor der FBS-Anbindung ist historisch.
-Plan: [docs/implementation-plan.md](docs/implementation-plan.md).
-Lizenz: [PolyForm Noncommercial 1.0.0](LICENSE); Mitarbeit: [CONTRIBUTING.md](CONTRIBUTING.md).
-
-Die aus Modeling Copilot übernommenen Dateien `fbsBridge.ts` und `fbsOidc.ts`
-behalten dessen [PolyForm-Noncommercial-Lizenz](LICENSE).
-Der Apache-Lizenztext und Copyright-Hinweis des übernommenen FBS-Moduls
-bleiben als Anhang in derselben `LICENSE` erhalten; die Rechte am ursprünglichen
-Code bleiben bestehen.
-
-Die früheren lokalen Legacy-API-Beispielwerte stehen im Compose-Block
-`x-legacy-api-environment`. Dieser startet keinen Legacy-Dienst und wird
-von API v2 nicht verwendet. Die alte Mongo-Adresse wurde auf den lokalen
-Compose-Dienst `mongo:27017` angepasst.
+Das Projekt steht unter der **PolyForm Noncommercial License 1.0.0**.
+Der vollständige Lizenztext steht in [LICENSE](LICENSE).
