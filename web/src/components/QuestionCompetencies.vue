@@ -1,0 +1,129 @@
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import competencyService from '@/services/competency.service'
+import type { Competency } from '@/model/types'
+
+const props = defineProps<{
+  competencyIds?: string[]
+}>()
+
+const emit = defineEmits<{
+  (e: 'update-competency-ids', newCompetencyIds: string[]): void
+}>()
+
+const localCompetencyIds = ref<string[]>([...(props.competencyIds ?? [])])
+const competencies = ref<Competency[]>([])
+
+watch(
+  () => props.competencyIds,
+  (newIds) => {
+    if (
+      Array.isArray(newIds) &&
+      JSON.stringify(localCompetencyIds.value) !== JSON.stringify(newIds)
+    ) {
+      localCompetencyIds.value = [...newIds]
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  localCompetencyIds,
+  (newIds) => {
+    if (JSON.stringify(props.competencyIds) !== JSON.stringify(newIds)) {
+      emit('update-competency-ids', [...newIds])
+    }
+  },
+  { deep: true }
+)
+
+/**
+ * Competencies als flache, nach Baum sortierte Liste mit Tiefenangabe
+ * für die Einrückung (Depth-First: jede Root-Competency direkt gefolgt
+ * von all ihren (rekursiven) Kindern).
+ */
+const orderedCompetencies = computed(() => {
+  const byParent = new Map<string | null, Competency[]>()
+  for (const competency of competencies.value) {
+    const parentId = competency.parentId ?? null
+    if (!byParent.has(parentId)) {
+      byParent.set(parentId, [])
+    }
+    byParent.get(parentId)!.push(competency)
+  }
+  for (const siblings of byParent.values()) {
+    siblings.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  const result: { competency: Competency; depth: number }[] = []
+  const visit = (parentId: string | null, depth: number) => {
+    for (const competency of byParent.get(parentId) ?? []) {
+      result.push({ competency, depth })
+      visit(competency.id, depth + 1)
+    }
+  }
+  visit(null, 0)
+  return result
+})
+
+/**
+ * Zeigt zu einer Competency-ID den Anzeigenamen. Fällt auf die rohe ID
+ * zurück, falls die Competency (noch) nicht geladen ist – verhindert
+ * Crashes im Chip-/Item-Template durch fehlende Werte, z.B. solange
+ * `competencyService.getAllCompetencies()` noch lädt.
+ */
+const competencyName = (competencyId: string): string =>
+  competencies.value.find((c) => c.id === competencyId)?.name ?? competencyId
+
+/**
+ * Baumpräfix für die Einrückung im Dropdown: zeigt neben der reinen
+ * Einrückung (padding-left) auch die Anzahl der übergeordneten Ebenen an
+ * (z.B. "─└ " bei Tiefe 2), damit die vollständige Hierarchie (nicht nur
+ * die erste Ebene) erkennbar bleibt.
+ */
+const treePrefix = (depth: number) => `${'─'.repeat(Math.max(0, depth - 1))}└ `
+
+onMounted(async () => {
+  try {
+    const res = await competencyService.getAllCompetencies()
+    competencies.value = res.data
+  } catch (error) {
+    console.error('Fehler beim Laden der Kompetenzen:', error)
+  }
+})
+</script>
+
+<template>
+  <v-select
+    v-model="localCompetencyIds"
+    :items="orderedCompetencies"
+    item-title="competency.name"
+    item-value="competency.id"
+    item-color="primary"
+    label="Kompetenzen dieser Aufgabe"
+    prepend-icon="mdi-shape-outline"
+    variant="solo"
+    chips
+    clearable
+    closable-chips
+    multiple
+  >
+    <template #item="{ props: itemProps, item }">
+      <v-list-item
+        v-bind="itemProps"
+        :title="undefined"
+        :style="{ paddingLeft: `${16 + (item.raw?.depth ?? 0) * 20}px` }"
+      >
+        <span v-if="(item.raw?.depth ?? 0) > 0" class="text-medium-emphasis">{{
+          treePrefix(item.raw?.depth ?? 0)
+        }}</span
+        >{{ item.raw?.competency?.name ?? competencyName(item.value) }}
+      </v-list-item>
+    </template>
+    <template #chip="{ props: chipProps, item }">
+      <v-chip v-bind="chipProps">
+        <strong>{{ item.raw?.competency?.name ?? competencyName(item.value) }}</strong>
+      </v-chip>
+    </template>
+  </v-select>
+</template>

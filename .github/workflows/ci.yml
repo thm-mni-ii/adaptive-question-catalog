@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run type-check:tests
+      - run: npm run build
+
+  api:
+    name: api (${{ matrix.component.name }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - name: legacy
+            directory: api/backend
+          - name: v2
+            directory: api/backend/v2
+    defaults:
+      run:
+        working-directory: ${{ matrix.component.directory }}
+    env:
+      MONGOMS_IP: 127.0.0.1
+      MONGOMS_VERSION: 7.0.14
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.component.directory }}/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - if: matrix.component.name == 'v2'
+        run: npm test
+      - if: matrix.component.name == 'v2'
+        run: npx --no-install tsc --noEmit -p tsconfig.seed.json
