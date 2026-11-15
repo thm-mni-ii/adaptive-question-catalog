@@ -1,3 +1,6 @@
+import authService from '@/services/auth/auth.service'
+import { isEmbedded, startFbsBridge, requestFbsToken, fbsTargetPath, fbsConnectionError } from '@/services/auth/fbsBridge'
+import { isFeedbacksystemCallback, completeFeedbacksystemSignIn, renewFeedbacksystemToken } from '@/services/auth/fbsOidc'
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { useAuthStore } from '@/stores/authStore'
@@ -5,6 +8,8 @@ import { useAuthStore } from '@/stores/authStore'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/login', component: () => import('../components/auth/FeedbacksystemLogin.vue') },
+    { path: '/oauth2/callback', component: () => import('../components/auth/FeedbacksystemLogin.vue') },
     {
       path: '/',
       name: 'home',
@@ -69,17 +74,26 @@ const router = createRouter({
   ]
 })
 
-// Dozenten-Werkzeuge (Aufgabenpool, Algorithm Lab, Kurs-Aufgaben/-Einstellungen)
-// sind nur für ADMIN in der Navigation sichtbar - zusätzlich hier als Guard
-// absichern, damit sie nicht per Direktaufruf der URL umgangen werden können.
-router.beforeEach((to) => {
-  if (!to.meta.requiresAdmin) return true
-
-  const authStore = useAuthStore()
-  const isAdmin = authStore.decodedToken?.globalRole === 'ADMIN'
-  if (isAdmin) return true
-
-  return { name: 'home', query: { forbidden: '1' } }
+router.beforeEach(async (to) => {
+  const auth = useAuthStore()
+  if (!isEmbedded && isFeedbacksystemCallback()) return await completeFeedbacksystemSignIn()
+  if (to.path === '/login') return true
+  let valid = false
+  try {
+    if (isEmbedded) {
+      fbsTargetPath.value = to.fullPath
+      if (!(await startFbsBridge())) return { path: '/login', query: { returnTo: to.fullPath } }
+    }
+    if (auth.token) {
+      valid = (await authService.validateToken()).data === true
+      if (!valid && (await (isEmbedded ? requestFbsToken() : renewFeedbacksystemToken()))) valid = (await authService.validateToken()).data === true
+    }
+  } catch { fbsConnectionError.value = 'Die Anmeldung konnte nicht geprüft werden. Bitte API-Verbindung und FBS-Konfiguration prüfen.' }
+  if (!valid) {
+    auth.clearToken()
+    return { path: '/login', query: { returnTo: to.fullPath } }
+  }
+  if (to.meta.requiresAdmin && auth.decodedToken?.globalRole !== 'ADMIN') return { name: 'home', query: { forbidden: '1' } }
+  return true
 })
-
 export default router

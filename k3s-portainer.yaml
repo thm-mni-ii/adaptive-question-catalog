@@ -1,0 +1,171 @@
+# Replace example domains and commit tags before importing into Portainer.
+# Create aqc-secrets and aqc-tls in this namespace first (see README).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: adaptive-question-catalog
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqc-config
+  namespace: adaptive-question-catalog
+data:
+  HOST: "0.0.0.0"
+  PORT: "3001"
+  MONGODB_DB_NAME: QCM_v2
+  JWT_JWKS_URI: https://fbs.example.org/oauth2/jwks
+  JWT_ISSUER: https://fbs.example.org
+  OIDC_TOKEN_URI: https://fbs.example.org/oauth2/token
+  OIDC_CLIENT_ID: adaptive-question-catalog
+  OIDC_REDIRECT_URIS: https://aqc.example.org/oauth2/callback
+  FBS_HOST_ORIGIN: https://fbs.example.org
+  FBS_PROVIDER_ID: adaptive-question-catalog
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data
+  namespace: adaptive-question-catalog
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+  namespace: adaptive-question-catalog
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: aqc-mongo}
+  template:
+    metadata:
+      labels: {app: aqc-mongo}
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:8.0
+          ports: [{containerPort: 27017}]
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef: {name: aqc-secrets, key: MONGO_USER}
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: aqc-secrets, key: MONGO_PASSWORD}
+          volumeMounts:
+            - {name: data, mountPath: /data/db}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: mongo-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: adaptive-question-catalog
+spec:
+  selector: {app: aqc-mongo}
+  ports: [{port: 27017, targetPort: 27017}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: adaptive-question-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: aqc-api}
+  template:
+    metadata:
+      labels: {app: aqc-api}
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/thm-mni-ii/adaptive-question-catalog-api:latest
+          imagePullPolicy: Always
+          ports: [{containerPort: 3001}]
+          envFrom:
+            - configMapRef: {name: aqc-config}
+          env:
+            - name: MONGODB_URL
+              valueFrom:
+                secretKeyRef: {name: aqc-secrets, key: MONGODB_URL}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: aqc-secrets, key: OIDC_CLIENT_SECRET, optional: true}
+          readinessProbe:
+            httpGet: {path: /health, port: 3001}
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: 3001}
+            initialDelaySeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: adaptive-question-catalog
+spec:
+  selector: {app: aqc-api}
+  ports: [{port: 3001, targetPort: 3001}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: adaptive-question-catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: aqc-web}
+  template:
+    metadata:
+      labels: {app: aqc-web}
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/thm-mni-ii/adaptive-question-catalog-web:latest
+          imagePullPolicy: Always
+          ports: [{containerPort: 80}]
+          envFrom:
+            - configMapRef: {name: aqc-config}
+          readinessProbe:
+            httpGet: {path: /config.js, port: 80}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: adaptive-question-catalog
+spec:
+  selector: {app: aqc-web}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqc
+  namespace: adaptive-question-catalog
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [aqc.example.org]
+      secretName: aqc-tls
+  rules:
+    - host: aqc.example.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port: {number: 80}

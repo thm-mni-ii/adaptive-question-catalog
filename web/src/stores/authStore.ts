@@ -4,25 +4,27 @@ import { jwtDecode } from 'jwt-decode'
 import type JwtToken from '@/model/JwtToken'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('jsessionid'))
+  const token = ref<string | null>(null)
   const decodedToken = ref<JwtToken | null>(null)
-
-  if (token.value) {
-    decodedToken.value = jwtDecode<JwtToken>(token.value)
-  }
-
-  const setToken = (newToken: string) => {
-    token.value = newToken
-    localStorage.setItem('jsessionid', newToken)
-    decodedToken.value = jwtDecode<JwtToken>(newToken)
-    localStorage.setItem('userId', decodedToken.value?.id || '')
-  }
-
   const clearToken = () => {
     token.value = null
     decodedToken.value = null
-    localStorage.removeItem('jsessionid')
+    sessionStorage.removeItem('aqc.token')
+    sessionStorage.removeItem('aqc.refreshToken')
   }
-
+  const setToken = (value: string) => {
+    try {
+      const claims = jwtDecode<JwtToken>(value)
+      if (claims.id == null || !claims.exp || claims.exp * 1000 <= Date.now()) throw new Error('Invalid token')
+      token.value = value
+      decodedToken.value = claims
+      sessionStorage.setItem('aqc.token', value)
+    } catch { clearToken() }
+  }
+  const saved = sessionStorage.getItem('aqc.token')
+  if (saved) setToken(saved)
+  // Retire the former query-string/developer-token login.
+  localStorage.removeItem('jsessionid')
+  localStorage.removeItem('userId')
   return { token, decodedToken, setToken, clearToken }
 })

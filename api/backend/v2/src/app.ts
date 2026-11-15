@@ -1,4 +1,4 @@
-import cors from "cors";
+import { createAuthRouter } from './auth/auth.routes';
 import express, { Express } from "express";
 import { Db } from "mongodb";
 import { createQuestionRouter } from "./question/question.routes";
@@ -11,10 +11,12 @@ import { createStudyConfigurationRouter } from "./studyConfiguration/studyConfig
 export function createApp(db: Db): Express {
   const app = express();
 
-  app.use(cors());
-  app.use(express.json());
+  // Same-origin access through Vite/nginx; no unrestricted cross-origin API.
+  app.use(express.json({ limit: "64kb" }));
   app.use(express.urlencoded({ extended: true }));
 
+  app.get("/health", (_req, res) => { res.json({ status: "ok" }); });
+  app.use("/api_v2/auth", createAuthRouter());
   app.use("/api_v2", createQuestionRouter(db));
   app.use("/api_v2", createCompetencyRouter(db));
   app.use("/api_v2", createSessionRouter(db));

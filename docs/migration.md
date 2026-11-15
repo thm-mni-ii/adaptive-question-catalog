@@ -1,3 +1,5 @@
+> Historischer Stand der Dateiüberführung. Aktuelle FBS-Anbindung, Container und Betriebsanleitung: siehe [README](../README.md).
+
 # Überführung aus dem Feedbacksystem
 
 ## Herkunft und Umfang
@@ -21,7 +23,9 @@ Die Root-Lizenz mit dem bestehenden Copyright-Hinweis stammt unverändert aus
 demselben Feedbacksystem-Commit. Von `modeling-copilot` wurden die grundlegende
 CI-/Container-Workflow-Struktur, Issue-Vorlagen sowie die Struktur von
 CODEOWNERS und CONTRIBUTING übernommen und an dieses Projekt angepasst.
-Die dortige PolyForm-Lizenz wurde nicht übernommen.
+Die dortige PolyForm-Lizenz wurde bei der ursprünglichen Überführung nicht übernommen.
+Inzwischen gilt für das Projekt PolyForm Noncommercial 1.0.0; der ursprüngliche
+Apache-Lizenztext samt Copyright-Hinweis bleibt im Anhang der Root-`LICENSE` erhalten.
 
 ## Integrationsgrenzen
 

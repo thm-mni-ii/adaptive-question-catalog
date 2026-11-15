@@ -735,36 +735,24 @@ Dokuments, keine allgemeingültige Prüfungsordnung:
 
 ### 14.1 Voraussetzungen
 
-- Node.js entsprechend den Angaben in der jeweiligen Projekt-README;
-- Docker Desktop für den lokalen MongoDB-Dienst;
-- Abhängigkeiten im Frontend und in `api/backend/v2`;
-- lokale `.env`-Konfiguration für Backend v2.
+Docker mit Compose und ein laufendes Feedbacksystem. Alle lokalen Werte stehen
+in der einzigen `docker-compose.yaml` an der Repository-Wurzel.
 
 ### 14.2 Lokaler Demo-Start
 
-Backend v2 im Verzeichnis `api/backend/v2` installieren und konfigurieren.
-Für eine Demo wird eine **eigene leere Datenbank** verwendet:
+Aus der Repository-Wurzel:
 
-```powershell
-npm ci
-Copy-Item .env.example .env
-docker compose up -d
-npm run seed
-npm run dev
+```sh
+docker compose up --build -d
+# Optional: einmaliger Seed in eine eigene leere Datenbank
+docker compose exec api npm run seed
 ```
 
-Danach im Verzeichnis `web`:
-
-```powershell
-npm ci
-npm run dev
-```
-
-Der Vite-Dev-Server läuft standardmäßig unter `http://localhost:8086`; die
-v2-API unter `http://localhost:3001`. Der Seed bricht ab, wenn die konfigurierte
-Datenbank bereits Dokumente enthält; er ist kein Reset-Befehl. Details und
-konkrete Startreihenfolge: [`web/README.md`](../README.md) sowie
-[`api/backend/v2/README.md`](../../api/backend/v2/README.md).
+Frontend: http://localhost:8086; API v2: http://localhost:3001.
+Der Seed bricht bei nicht leerer Datenbank ab und ist kein Reset.
+FBS-Anmeldung und Einrichtung: [Repository-README](../../README.md).
+Keine lokale Secret-Umgebungsdatei anlegen; Produktionsgeheimnisse kommen
+über Portainer-Secrets.
 
 ### 14.3 Relevante Prüfungen
 

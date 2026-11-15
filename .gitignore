@@ -9,10 +9,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Local configuration; retain checked-in examples
+# Local configuration
 .env
 .env.*
-!.env.example
 .secrets/
 secrets/
 
@@ -30,7 +29,9 @@ Thumbs.db
 /.codex/
 /.agents/
 /AGENTS.md
+AGENTS.md
 AGENTS.override.md
+SKILL.md
 .playwright-mcp/
 .playwright-cli/
 .playwright/

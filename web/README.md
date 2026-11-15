@@ -46,6 +46,12 @@ See [Vite Configuration Reference](https://vitejs.dev/config/).
 
 ## Project Setup
 
+Für das aktuelle Setup mit FBS-Anmeldung siehe die
+[Root-README](../README.md#lokale-entwicklung): Docker startet nur API und
+MongoDB; das Frontend läuft lokal über Vite. Öffentliche Dev-Werte stehen in
+`vite.config.ts`. Web-Produktionsimages werden in CI/CD gebaut und über
+`k3s-portainer.yaml` bereitgestellt.
+
 ```sh
 npm install
 ```
@@ -66,8 +72,9 @@ ausführen; die Lockfiles enthalten die vorgesehenen Versionen.
    npm run dev
    ```
 
-3. `http://localhost:8086/courses/1` öffnen. Frontend und Backend binden
-   standardmäßig an die lokale Loopback-Adresse. Nach Updates der
+3. `http://localhost:8086/courses/1` öffnen. Vite lauscht mit `host: true`
+   auch auf den Netzwerkschnittstellen; die Docker-API bleibt lokal gebunden.
+   Für den FBS-Login die registrierte Adresse `http://localhost:8086` verwenden. Nach Updates der
    Vite-Abhängigkeiten einen bereits laufenden Dev-Server neu starten.
 
 Die Datenbankinitialisierung ist kein Reset: `npm run seed` verweigert den Start,

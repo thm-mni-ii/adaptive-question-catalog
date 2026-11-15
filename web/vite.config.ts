@@ -6,13 +6,15 @@ import vueJsx from '@vitejs/plugin-vue-jsx'
 import eslintPlugin from 'vite-plugin-eslint'
 import vuetify from 'vite-plugin-vuetify'
 
-const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3000/';
-const backendV2Url = process.env.BACKEND_V2_URL ?? 'http://localhost:3001/';
-const coreUrl = process.env.CORE_URL ?? 'https://localhost/';
-
 // https://vitejs.dev/config/
-export default defineConfig({
-  base: process.env.VITE_BASE_URL ?? '/',
+export default defineConfig(({ command }) => ({
+  envDir: false,
+  // Public settings for the host dev server. Production uses /config.js from Portainer.
+  define: command === 'serve' ? {
+    'import.meta.env.VITE_FBS_HOST_ORIGIN': JSON.stringify('http://localhost:8083'),
+    'import.meta.env.VITE_FBS_PROVIDER_ID': JSON.stringify('adaptive-question-catalog')
+  } : {},
+  base: '/',
   css: {
     postcss: {
       plugins: [
@@ -48,25 +50,26 @@ export default defineConfig({
     }
   },
   server: {
-    host: process.env.VITE_HOST ?? '127.0.0.1',
+    host: true,
     port: 8086,
+    strictPort: true,
     proxy: {
       '/api_v1': {
-        target: backendUrl,
+        target: 'http://127.0.0.1:3000/',
         changeOrigin: true,
         secure: false
       },
       '/api_v2': {
-        target: backendV2Url,
+        target: 'http://127.0.0.1:3001/',
         changeOrigin: true,
         secure: false
       },
       '/core': {
-        target: coreUrl,
+        target: 'https://127.0.0.1/',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/core/, '/api/v1')
       }
     }
   }
-})
+}))

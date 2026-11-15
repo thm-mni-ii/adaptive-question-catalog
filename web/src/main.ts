@@ -13,12 +13,20 @@ import router from './router'
 import { registerPlugins } from './plugins'
 import vuetify from './plugins/vuetify'
 
+import { isEmbedded } from './services/auth/fbsBridge'
+import { isFeedbacksystemCallback, handOverFeedbacksystemRenewal, resumeFeedbacksystemSession } from './services/auth/fbsOidc'
+
+if (isEmbedded && isFeedbacksystemCallback()) {
+  handOverFeedbacksystemRenewal()
+} else {
 const pinia = createPinia()
 const app = createApp(App)
 registerPlugins()
 
+app.use(pinia)
 app.use(router)
 app.use(vuetify)
 app.use(VNetworkGraph)
-app.use(pinia)
+if (!isEmbedded) resumeFeedbacksystemSession()
 app.mount('#app')
+}

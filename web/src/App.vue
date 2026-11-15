@@ -12,6 +12,7 @@
         <v-tab v-if="isAdmin" :to="{ name: 'questionPool' }">Aufgabenpool</v-tab>
         <v-tab v-if="isAdmin" :to="{ name: 'AlgorithmLab' }">Algorithm Lab</v-tab>
       </v-tabs>
+      <v-btn v-if="authStore.token && !isEmbedded" @click="signOut">Abmelden</v-btn>
     </v-app-bar>
     <v-main>
       <RouterView />
@@ -24,7 +25,14 @@ import { computed } from 'vue'
 import { RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 
+import { isEmbedded } from '@/services/auth/fbsBridge'
+import { forgetFeedbacksystemSession } from '@/services/auth/fbsOidc'
 const authStore = useAuthStore()
+function signOut() {
+  forgetFeedbacksystemSession()
+  authStore.clearToken()
+  window.location.assign('/login')
+}
 const isAdmin = computed(() => authStore.decodedToken?.globalRole === 'ADMIN')
 </script>
 

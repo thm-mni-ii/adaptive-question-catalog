@@ -157,10 +157,6 @@ async function loadCourseProgress() {
 
 onMounted(loadCourseProgress)
 
-const jsessionid = router.currentRoute.value.query.jsessionid?.toString()
-if (jsessionid) {
-  authStore.setToken(jsessionid)
-}
 
 const startStudy = (courseId: number) => {
   router.push({ name: 'studyCourse', params: { courseId } })

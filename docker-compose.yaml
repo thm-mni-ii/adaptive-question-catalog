@@ -1,0 +1,48 @@
+# Local API and database only. Run web locally with npm run dev.
+# Production uses k3s-portainer.yaml and Portainer secrets.
+# x-legacy-api-environment retains former v1 example values; v2 does not use them.
+name: adaptive-question-catalog
+services:
+  mongo:
+    image: mongo:8.0
+    ports:
+      - 127.0.0.1:27019:27017
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+  api:
+    build:
+      context: ./api/backend/v2
+      target: build
+    ports:
+      - 127.0.0.1:3001:3001
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+      MONGODB_DB_NAME: QCM_v2
+      JWT_JWKS_URI: http://host.docker.internal:8080/oauth2/jwks
+      JWT_ISSUER: http://localhost:8083
+      OIDC_TOKEN_URI: http://host.docker.internal:8083/oauth2/token
+      OIDC_TOKEN_HOST: localhost:8083
+      OIDC_CLIENT_ID: adaptive-question-catalog
+      OIDC_CLIENT_SECRET: ""
+      OIDC_REDIRECT_URIS: http://localhost:8086/oauth2/callback
+      HOST: 0.0.0.0
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    command:
+      - npm
+      - run
+      - dev
+    volumes:
+      - ./api/backend/v2:/app
+      - api-node-modules:/app/node_modules
+      - ./web:/web:ro
+volumes:
+  mongo-data: null
+  api-node-modules: null
+x-legacy-api-environment:
+  JWT_SECRET: wwwa
+  MONGODB_URL: mongodb://mongo:27017/

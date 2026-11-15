@@ -60,6 +60,17 @@ jobs:
       - run: npm ci
       - run: npm run build
       - if: matrix.component.name == 'v2'
+        name: Download isolated test MongoDB before timed tests
+        run: node -e "require('mongodb-memory-server').MongoMemoryServer.create().then(server => server.stop()).catch(error => { console.error(error); process.exit(1) })"
+      - if: matrix.component.name == 'v2'
         run: npm test
       - if: matrix.component.name == 'v2'
         run: npx --no-install tsc --noEmit -p tsconfig.seed.json
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: docker compose config --quiet
+      - run: docker build --tag aqc-api:ci api/backend/v2
+      - run: docker build --tag aqc-web:ci web

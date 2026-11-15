@@ -19,9 +19,9 @@
  * "Matching" normalisiert.
  *
  * Nutzung (aus api/backend/v2/):
- *   npx tsx --env-file=.env src/seed/migrate-matching-questions.ts
+ *   docker compose exec api npm run migrate:matching-questions
  *   # Nur anzeigen, was geändert würde, ohne zu schreiben:
- *   npx tsx --env-file=.env src/seed/migrate-matching-questions.ts --dry-run
+ *   docker compose exec api npm run migrate:matching-questions -- --dry-run
  */
 import { connect, disconnect } from "../mongo/mongo";
 
